@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "body": {
+    "model": "wity-1",
+    "answers": {
+      "urgent": {
+        "type": "noul",
+        "noul": 0.9998766053661012
+      }
+    },
+    "metadata": {
+      "reasoning": "off",
+      "elapsed_ms": 32.523
+    },
+    "usage": {
+      "input_tokens": 123,
+      "output_tokens": 0
+    }
+  }
+}

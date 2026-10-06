@@ -1,0 +1,72 @@
+{
+  "status": 200,
+  "body": {
+    "model": "wity-1",
+    "answers": {
+      "team": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9999344758578628,
+          "technical": 0.00003071710365161304,
+          "other": 0.00003480703848551867
+        },
+        "confidence": 0.9993245913658168,
+        "reasoning": {
+          "mode": "auto",
+          "thought": false,
+          "reason": null,
+          "forecast": false,
+          "thought_tokens": null,
+          "budget_limited": false,
+          "samples": 0
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "noul": 0.9998977001513948,
+        "reasoning": {
+          "mode": "auto",
+          "thought": false,
+          "reason": null,
+          "forecast": false,
+          "thought_tokens": null,
+          "budget_limited": false,
+          "samples": 0
+        }
+      },
+      "severity": {
+        "type": "score",
+        "score": 1.973228864139502,
+        "legend": {
+          "0": "Not at all",
+          "1": "A little",
+          "2": "A lot"
+        },
+        "probabilities": {
+          "0": 0.010469818607957574,
+          "1": 0.0058314986445830285,
+          "2": 0.9836986827474594
+        },
+        "confidence": 0.9145263805873034,
+        "reasoning": {
+          "mode": "auto",
+          "thought": false,
+          "reason": null,
+          "forecast": false,
+          "thought_tokens": null,
+          "budget_limited": false,
+          "samples": 0
+        }
+      }
+    },
+    "metadata": {
+      "reasoning": "auto",
+      "elapsed_ms": 182.949
+    },
+    "usage": {
+      "input_tokens": 287,
+      "output_tokens": 0
+    }
+  }
+}

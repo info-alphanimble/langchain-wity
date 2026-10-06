@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "body": {
+    "model": "wity-1",
+    "answers": {
+      "team": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9999544067994527,
+          "technical": 0.000027535185211977326,
+          "other": 0.000018058015335341004
+        },
+        "confidence": 0.9995158063579423
+      }
+    },
+    "metadata": {
+      "reasoning": "off",
+      "elapsed_ms": 41.623
+    },
+    "usage": {
+      "input_tokens": 143,
+      "output_tokens": 0
+    }
+  }
+}

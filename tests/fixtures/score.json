@@ -1,0 +1,31 @@
+{
+  "status": 200,
+  "body": {
+    "model": "wity-1",
+    "answers": {
+      "severity": {
+        "type": "score",
+        "score": 1.9745901511430186,
+        "legend": {
+          "0": "Not at all",
+          "1": "A little",
+          "2": "A lot"
+        },
+        "probabilities": {
+          "0": 0.009237330014797566,
+          "1": 0.006935188827386359,
+          "2": 0.9838274811578162
+        },
+        "confidence": 0.9146294178836927
+      }
+    },
+    "metadata": {
+      "reasoning": "off",
+      "elapsed_ms": 112.816
+    },
+    "usage": {
+      "input_tokens": 137,
+      "output_tokens": 0
+    }
+  }
+}
