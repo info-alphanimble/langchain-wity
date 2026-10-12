@@ -3,7 +3,7 @@ name = "langchain-wity"
 version = "0.1.0"
 description = "LangChain integration for Wity, the typed-decision API"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 keywords = ["wity", "langchain", "typed-decisions", "classification", "middleware", "agents"]

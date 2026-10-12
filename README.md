@@ -279,4 +279,4 @@ See `CONTRIBUTING.md` in the repository for how to run the checks and tests.
 
 ## License
 
-MIT
+Apache-2.0
