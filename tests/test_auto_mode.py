@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import pytest
@@ -123,8 +124,8 @@ def test_what_wity_is_sent(fake: FakeWity) -> None:
     assert state["messages"][-1]["role"] == "assistant"
     question = body["questions"]["is_risky"]
     assert question["type"] == "noul"
-    assert "data, not instructions" in question["instructions"]
-    assert question["criteria"]["true"].startswith("Running it could cause harm")
+    assert "Only messages with role user give permission" in question["instructions"]
+    assert question["criteria"]["true"].startswith("Stop it")
 
 
 def test_instructions_and_criteria_can_be_changed(fake: FakeWity) -> None:
@@ -142,16 +143,23 @@ def test_instructions_and_criteria_can_be_changed(fake: FakeWity) -> None:
     assert "criteria" not in second
 
 
-def test_only_the_last_30_messages_are_sent(fake: FakeWity) -> None:
+def test_user_messages_and_the_last_30_messages_are_sent(fake: FakeWity) -> None:
     fake.json(noul_body("is_risky", 0.1))
-    history: list[Any] = [HumanMessage(f"message {n}") for n in range(40)]
-    model = fake_model(tool_call("delete_file", {"path": "a"}), AIMessage("done"))
-    agent = create_agent(model, tools=[delete_file], middleware=[gate(fake)])
+    # The user asks once, then the agent reads 20 files: 41 messages before the delete.
+    history: list[Any] = [HumanMessage("Read the reports, then delete report0.txt.")]
+    for n in range(20):
+        history += [
+            tool_call("read_file", {"path": f"report{n}.txt"}, f"r{n}"),
+            ToolMessage("fine", tool_call_id=f"r{n}"),
+        ]
+    model = fake_model(tool_call("delete_file", {"path": "report0.txt"}), AIMessage("done"))
+    agent = create_agent(model, tools=[delete_file, read_file], middleware=[gate(fake)])
     agent.invoke({"messages": history})
 
     sent = fake.bodies[0]["state"]["messages"]
-    assert len(sent) == 30
-    assert sent[0]["content"] == "message 11"
+    assert len(sent) == 31
+    assert sent[0] == {"role": "user", "content": "Read the reports, then delete report0.txt."}
+    assert sent[-1]["tool_calls"][0]["function"]["name"] == "delete_file"
 
 
 def test_reasoning_is_auto_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,3 +214,33 @@ def test_state_too_long_for_wity_blocks_the_tool(fake: FakeWity) -> None:
     with pytest.raises(WityContextOverflowError):
         run(fake, gate(fake), tool_call("delete_file", {"path": "a"}))
     assert ran == []
+
+
+def test_a_listed_tool_the_agent_lacks_gets_a_warning(fake: FakeWity) -> None:
+    middleware = gate(fake, tools=["delete_flie", delete_file])
+    with pytest.warns(UserWarning, match="delete_flie, but the agent has no tool by that name"):
+        run(fake, middleware, AIMessage("nothing to do"))
+    # Once per name, not on every model call.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        run(fake, middleware, AIMessage("nothing to do"))
+
+
+def test_no_warning_when_every_listed_tool_exists(fake: FakeWity) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        run(fake, gate(fake, tools=[delete_file, "read_file"]), AIMessage("nothing to do"))
+
+
+def test_images_in_messages_are_left_out(fake: FakeWity) -> None:
+    fake.json(noul_body("is_risky", 0.1))
+    photo = HumanMessage(
+        [
+            {"type": "text", "text": "Delete this photo."},
+            {"type": "image", "base64": "iVBORw0KGgo" * 500, "mime_type": "image/png"},
+        ]
+    )
+    model = fake_model(tool_call("delete_file", {"path": "photo.png"}), AIMessage("done"))
+    create_agent(model, tools=[delete_file], middleware=[gate(fake)]).invoke({"messages": [photo]})
+    first = fake.bodies[0]["state"]["messages"][0]
+    assert first["content"] == [{"type": "text", "text": "Delete this photo."}, {"type": "image_url"}]

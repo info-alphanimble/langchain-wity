@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
+import dataclasses
+import datetime
+import decimal
 import logging
+import pickle
+import uuid
 from typing import Any
 
 import httpx
@@ -19,6 +26,7 @@ from langchain_core.exceptions import (
 )
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
+from pydantic import BaseModel
 
 import langchain_wity.classifier
 from langchain_wity import (
@@ -392,3 +400,118 @@ def test_score_answers(fake: FakeWity) -> None:
     severity = score("How much is this hurting the customer?", ["Not at all", "A little", "A lot"])
     res = fake.classifier(questions={"severity": severity}).invoke(TICKET)
     assert set(res.scores["severity"].probabilities) == {"0", "1", "2"}
+
+
+# ---------------------------------------------------------------------------
+# Found by black-box testing (test/langchain in the root repo)
+# ---------------------------------------------------------------------------
+
+
+def test_max_latency_ms_is_sent_as_a_whole_number(fake: FakeWity) -> None:
+    # The API refuses 800.0 with "max_latency_ms must be an integer".
+    fake.classifier(questions={"urgent": URGENT}, max_latency_ms=800.0).invoke(TICKET)
+    assert b'"max_latency_ms": 800' in fake.requests[0].content
+    assert b"800.0" not in fake.requests[0].content
+
+
+def test_max_latency_ms_with_a_fraction_is_refused(fake: FakeWity) -> None:
+    with pytest.raises(ValueError, match="max_latency_ms"):
+        fake.classifier(max_latency_ms=800.5)
+
+
+class Ticket(BaseModel):
+    subject: str
+    opened: datetime.date
+
+
+@dataclasses.dataclass
+class Order:
+    id: uuid.UUID
+    total: decimal.Decimal
+
+
+def test_models_dataclasses_and_dates_are_state(fake: FakeWity) -> None:
+    order_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    fake.classifier(questions={"urgent": URGENT}).invoke(Ticket(subject="Refund", opened=datetime.date(2026, 10, 1)))
+    fake.classifier(questions={"urgent": URGENT}).invoke(
+        {"order": Order(id=order_id, total=decimal.Decimal("9.50")), "at": datetime.datetime(2026, 10, 1, 9, 30)}
+    )
+    assert fake.bodies[0]["state"] == {"subject": "Refund", "opened": "2026-10-01"}
+    assert fake.bodies[1]["state"] == {
+        "order": {"id": str(order_id), "total": "9.50"},
+        "at": "2026-10-01T09:30:00",
+    }
+
+
+def test_media_in_messages_is_left_out(fake: FakeWity) -> None:
+    message = HumanMessage(
+        [
+            {"type": "text", "text": "Is this receipt a duplicate?"},
+            {"type": "image", "base64": "iVBORw0KGgo" * 1000, "mime_type": "image/png"},
+            {"type": "image", "url": "https://example.com/receipt.png"},
+        ]
+    )
+    fake.classifier(questions={"urgent": URGENT}).invoke([message])
+    assert fake.bodies[0]["state"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Is this receipt a duplicate?"},
+                {"type": "image_url"},
+                {"type": "image_url"},
+            ],
+        }
+    ]
+
+
+def test_works_across_event_loops(fake: FakeWity) -> None:
+    classifier = fake.classifier(questions={"urgent": URGENT})
+    for _ in range(3):
+        asyncio.run(classifier.ainvoke(TICKET))
+    assert len(fake.requests) == 3
+
+
+def test_drops_clients_of_closed_loops(fake: FakeWity) -> None:
+    # A real connection keeps its loop alive, so the weak key never drops it. `loops` does the same here.
+    classifier = fake.classifier(questions={"urgent": URGENT})
+    loops = []
+    for _ in range(3):
+        loop = asyncio.new_event_loop()
+        loops.append(loop)
+        loop.run_until_complete(classifier.ainvoke(TICKET))
+        loop.close()
+    assert len(classifier._async_clients) == 1
+
+
+def test_close_and_aclose(fake: FakeWity, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WITY_API_KEY", "wity_from_env_0000000000")
+    classifier = WityClassifier(questions={"urgent": URGENT})
+    classifier.close()
+
+    async def use_and_close() -> None:
+        await classifier.aclose()  # Nothing opened in this loop yet: does nothing.
+
+    asyncio.run(use_and_close())
+
+
+def test_pickle_and_deepcopy_make_fresh_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WITY_API_KEY", "wity_from_env_0000000000")
+    classifier = WityClassifier(questions={"urgent": URGENT}, reasoning="off", max_latency_ms=900)
+    for twin in (pickle.loads(pickle.dumps(classifier)), copy.deepcopy(classifier)):
+        assert isinstance(twin, WityClassifier)
+        assert (twin.questions, twin.reasoning, twin.max_latency_ms) == ({"urgent": URGENT}, "off", 900)
+        assert twin._client is not classifier._client
+
+
+def test_pickle_never_holds_a_key_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WITY_API_KEY", "wity_from_env_0000000000")
+    assert b"wity_from_env" not in pickle.dumps(WityClassifier(questions={"urgent": URGENT}))
+
+
+def test_errors_survive_pickling(fake: FakeWity) -> None:
+    fake.reply(httpx.Response(429, json={"error": "slow down"}, headers={"retry-after": "3"}))
+    with pytest.raises(WityRateLimitError) as caught:
+        fake.classifier(questions={"urgent": URGENT}).invoke(TICKET)
+    copy_ = pickle.loads(pickle.dumps(caught.value))
+    assert type(copy_) is WityRateLimitError
+    assert (copy_.status, copy_.headers.get("retry-after"), str(copy_)) == (429, "3", str(caught.value))

@@ -58,7 +58,7 @@ The answer is the `wity-sdk` response, unchanged. Answers come back under the na
 
 Probabilities sum to 1, but they aren't calibrated. Treat them as a ranking of how sure Wity is, not as exact odds.
 
-Keep one classifier around and reuse it. It keeps its connections open, so later calls are faster.
+Keep one classifier around and reuse it. It keeps its connections open, so later calls are faster. It works from any thread and any event loop. Call `close()` (or `await aclose()` in async code) when you're done with it.
 
 ## Questions in the constructor
 
@@ -95,7 +95,7 @@ With questions in the constructor, the whole input is the state, even a dict tha
 
 ## Messages as state
 
-State can be text, a dict, a list, a LangChain message or a list of messages. Messages are sent as `{role, content}`, and they can also sit inside dicts and lists:
+State can be text, a dict, a list, a Pydantic model, a dataclass, a LangChain message or a list of messages. Models and dataclasses become dicts, and dates, UUIDs and decimals become text. Messages are sent as `{role, content}`, and they can also sit inside dicts and lists:
 
 ```python
 from langchain_core.messages import AIMessage, HumanMessage
@@ -114,11 +114,13 @@ upset.invoke(chat).nouls["upset"].noul  # 0.99991...
 res = await upset.ainvoke({"customer": {"plan": "pro", "orders": 14}, "chat": chat})
 ```
 
+Images, audio and files inside messages are left out: Wity gets only their type, like `{"type": "image_url"}`. Sent as text, even a small image would be thousands of tokens Wity can't read.
+
 `invoke`, `ainvoke`, `batch` and `abatch` all work.
 
 ## Model router
 
-`ModelRouterMiddleware` sends easy tasks to a cheap model and hard ones to a strong model. At the start of each agent run, Wity reads the latest user message and picks a route.
+`ModelRouterMiddleware` sends easy tasks to a cheap model and hard ones to a strong model. At the start of each agent run, Wity reads the latest user message and picks a route. It also sees up to 4 earlier user messages, so a follow-up like "now write the migration for it" keeps its context.
 
 This example uses OpenAI models, so it needs `langchain-openai` and an OpenAI key. Any LangChain chat model works.
 
@@ -140,6 +142,7 @@ result["model_route"]["choice"]         # "large"
 result["model_route"]["probabilities"]  # {"small": 0.0303..., "large": 0.9696...}
 ```
 
+- You need at least two routes.
 - `model` is a LangChain chat model, or a model string for `init_chat_model`.
 - Every model call in the run goes to the picked model.
 - Wity's full answer is saved in the agent state as `model_route`, so you can see why a model was picked. It's a plain dict, so checkpointers can save it.
@@ -147,7 +150,7 @@ result["model_route"]["probabilities"]  # {"small": 0.0303..., "large": 0.9696..
 
 ## Tool-risk gate
 
-`AutoModeMiddleware` checks the tools you list before they run. Wity sees the proposed call, the tool's description and the last 30 messages, and answers one yes/no question: is this call risky, or not clearly approved by the user?
+`AutoModeMiddleware` checks the tools you list before they run. Wity sees the proposed call, the tool's description, every message the user wrote and the 30 most recent messages. It answers one yes/no question: should this call be stopped? It stops calls the user didn't ask for or said not to do yet, calls that do more than the user asked, and calls that expose private data. A call that does exactly what the user asked runs, even a lasting one like deleting the file they named.
 
 Here `read_file`, `send_email` and `delete_file` stand for your own tools:
 
@@ -160,10 +163,10 @@ agent = create_agent("openai:gpt-5-mini", tools=[read_file, send_email, delete_f
 ```
 
 - When the probability of risky is at or above `threshold` (0.5 by default), the tool doesn't run. The agent gets an error message instead, such as: "The tool call `send_email` was blocked because Wity rated it risky (probability 1.00). The tool was not run."
-- Tools you don't list run without a check.
+- Tools you don't list run without a check. If a name you list matches none of the agent's tools, for example because of a typo, you get a warning on the first model call.
 - If Wity fails, the error is raised and the tool doesn't run. That includes a state longer than Wity accepts, which raises `WityContextOverflowError`.
 - Wity treats everything in the state as data, not instructions. Only the user's own messages can approve an action. This keeps a web page or file from approving a call by pretending to give orders.
-- The gate blocks; it doesn't ask a person. You can use it next to LangChain's `HumanInTheLoopMiddleware`.
+- The gate blocks; it doesn't ask a person. You can use it next to LangChain's `HumanInTheLoopMiddleware`, but the gate can't see a person's approval there. It still checks a call a person approved, and it can block it. To let a person have the last word on a tool, list that tool in `HumanInTheLoopMiddleware` only.
 
 ### Tuning the threshold
 
@@ -198,17 +201,17 @@ Wity answers most questions in one fast pass. With `reasoning="auto"` it thinks 
 | `"always"` | Always thinks. |
 
 - `WityClassifier` uses the API default, `"auto"`. Set `reasoning=` to change it.
-- The router uses `"off"`, because it runs on every agent run.
+- The router uses `"auto"` too. Clear tasks get one fast pass; Wity thinks only when the routes are close.
 - The risk gate uses `"auto"`, so close calls get a closer look.
 
 To change a middleware's setting, pass your own classifier. It must not have questions of its own:
 
 ```python
-router = ModelRouterMiddleware(choices=..., instructions=..., classifier=WityClassifier(reasoning="auto"))
+router = ModelRouterMiddleware(choices=..., instructions=..., classifier=WityClassifier(reasoning="off"))
 gate = AutoModeMiddleware(tools=[send_email], classifier=WityClassifier(reasoning="always"))
 ```
 
-`max_latency_ms=` (200 to 120000) caps the time per request. Thinking stops early to meet it.
+`max_latency_ms=` (a whole number from 200 to 120000) caps the time per request. Thinking stops early to meet it.
 
 ## Options
 
@@ -216,7 +219,7 @@ gate = AutoModeMiddleware(tools=[send_email], classifier=WityClassifier(reasonin
 |---|---|---|
 | `questions` | none | Fixed questions. Then each call takes only the state. |
 | `reasoning` | API default (`"auto"`) | `"off"`, `"auto"` or `"always"` |
-| `max_latency_ms` | none | Time limit per request, 200 to 120000 ms |
+| `max_latency_ms` | none | Time limit per request, a whole number from 200 to 120000 ms |
 | `api_key` | `WITY_API_KEY` | Your Wity key |
 | `base_url` | `WITY_BASE_URL`, then the SDK's default | The API address |
 | `timeout` | 60 | Seconds per attempt |
@@ -256,6 +259,10 @@ classifier = WityClassifier(questions=..., max_retries=0).with_retry(stop_after_
 ```
 
 **Tracing.** Each Wity call shows up in LangSmith as a model call, with provider `wity`, model `wity-1` and the input token count. Your key never appears in traces, `repr()` or saved config. The middlewares keep tool arguments and messages out of their own trace step. The Wity call inside that step is traced like any other classifier call, with the state it sent.
+
+LangChain's `get_usage_metadata_callback()` doesn't count Wity's tokens. Read them from `res.usage.input_tokens`, or in LangSmith.
+
+**Pickling.** Classifiers and errors can be pickled, for example to send them to a process pool. A pickled classifier holds its options, not its connections. A key read from `WITY_API_KEY` isn't pickled: the other process reads its own.
 
 ## Examples
 

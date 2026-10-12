@@ -52,7 +52,7 @@ def test_sends_the_latest_user_message_and_the_routes(fake: FakeWity) -> None:
     agent.invoke({"messages": [HumanMessage("old question"), AIMessage("old answer"), HumanMessage("What's 2 + 2?")]})
 
     body = fake.bodies[0]
-    assert body["state"] == "What's 2 + 2?"
+    assert body["state"] == {"earlier_user_messages": ["old question"], "latest_user_message": "What's 2 + 2?"}
     assert body["reasoning"] == "off"
     question = body["questions"]["model_route"]
     assert question["type"] == "choice"
@@ -142,10 +142,10 @@ async def test_async_wity_error_stops_the_run(fake: FakeWity) -> None:
         await agent.ainvoke({"messages": [HumanMessage("Hi")]})
 
 
-def test_reasoning_is_off_by_default(fake: FakeWity, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reasoning_is_auto_by_default(fake: FakeWity, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WITY_API_KEY", "wity_from_env_0000000000")
     middleware = router(fake, fake_model(), fake_model(), classifier=None)
-    assert middleware.classifier.reasoning == "off"
+    assert middleware.classifier.reasoning == "auto"
 
 
 def test_your_own_classifier_is_used(fake: FakeWity) -> None:
@@ -162,9 +162,11 @@ def test_a_classifier_with_its_own_questions_is_refused(fake: FakeWity) -> None:
         router(fake, fake_model(), fake_model(), classifier=classifier)
 
 
-def test_no_routes_is_refused(fake: FakeWity) -> None:
-    with pytest.raises(ValueError, match="at least one route"):
-        ModelRouterMiddleware(choices={}, instructions=INSTRUCTIONS, classifier=fake.classifier())
+@pytest.mark.parametrize("count", [0, 1])
+def test_fewer_than_two_routes_is_refused(fake: FakeWity, count: int) -> None:
+    choices = {f"r{n}": ModelChoice(model=fake_model(), criteria="Anything.") for n in range(count)}
+    with pytest.raises(ValueError, match="at least two routes"):
+        ModelRouterMiddleware(choices=choices, instructions=INSTRUCTIONS, classifier=fake.classifier())
 
 
 def test_works_with_a_checkpointer(fake: FakeWity, recwarn: pytest.WarningsRecorder) -> None:
@@ -181,3 +183,32 @@ def test_works_with_a_checkpointer(fake: FakeWity, recwarn: pytest.WarningsRecor
     assert agent.get_state(config).values["model_route"]["choice"] == "fast"
     assert (fast.calls, powerful.calls) == (1, 1)
     assert [str(w.message) for w in recwarn] == []
+
+
+def test_a_single_message_is_sent_without_earlier_ones(fake: FakeWity) -> None:
+    fake.json(choice_body("model_route", "fast", {"fast": 0.9, "powerful": 0.1}))
+    fast = fake_model(AIMessage("ok"))
+    create_agent(fast, middleware=[router(fake, fast, fake_model())]).invoke({"messages": [HumanMessage("Hi")]})
+    assert fake.bodies[0]["state"] == {"latest_user_message": "Hi"}
+
+
+def test_only_the_4_earlier_user_messages_are_sent(fake: FakeWity) -> None:
+    fake.json(choice_body("model_route", "fast", {"fast": 0.9, "powerful": 0.1}))
+    fast = fake_model(AIMessage("ok"))
+    history: list[Any] = []
+    for n in range(8):
+        history += [HumanMessage(f"ask {n}"), AIMessage(f"answer {n}")]
+    history.append(HumanMessage("last ask"))
+    create_agent(fast, middleware=[router(fake, fast, fake_model())]).invoke({"messages": history})
+    assert fake.bodies[0]["state"] == {
+        "earlier_user_messages": ["ask 4", "ask 5", "ask 6", "ask 7"],
+        "latest_user_message": "last ask",
+    }
+
+
+def test_images_are_named_not_dropped(fake: FakeWity) -> None:
+    fake.json(choice_body("model_route", "fast", {"fast": 0.9, "powerful": 0.1}))
+    fast = fake_model(AIMessage("ok"))
+    image_only = HumanMessage([{"type": "image", "base64": "iVBORw0KGgo", "mime_type": "image/png"}])
+    create_agent(fast, middleware=[router(fake, fast, fake_model())]).invoke({"messages": [image_only]})
+    assert fake.bodies[0]["state"] == {"latest_user_message": "[image]"}
