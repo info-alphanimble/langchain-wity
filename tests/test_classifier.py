@@ -28,7 +28,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 
-import langchain_wity.classifier
+import langchain_wity._base
 from langchain_wity import (
     SystemOneResponse,
     WityAPIError,
@@ -381,7 +381,7 @@ class FakeRun:
 
 def test_token_count_goes_on_the_trace(fake: FakeWity, monkeypatch: pytest.MonkeyPatch) -> None:
     run = FakeRun()
-    monkeypatch.setattr(langchain_wity.classifier, "get_current_run_tree", lambda: run)
+    monkeypatch.setattr(langchain_wity._base, "get_current_run_tree", lambda: run)
     fake.classifier(questions={"urgent": URGENT}).invoke(TICKET)
     assert run.extra["metadata"]["usage_metadata"] == {"input_tokens": 123, "output_tokens": 0, "total_tokens": 123}
 
@@ -390,7 +390,7 @@ def test_a_tracing_problem_never_fails_the_call(fake: FakeWity, monkeypatch: pyt
     def broken() -> None:
         raise RuntimeError("tracer down")
 
-    monkeypatch.setattr(langchain_wity.classifier, "get_current_run_tree", broken)
+    monkeypatch.setattr(langchain_wity._base, "get_current_run_tree", broken)
     res = fake.classifier(questions={"urgent": URGENT}).invoke(TICKET)
     assert res.nouls["urgent"].noul > 0.9
 

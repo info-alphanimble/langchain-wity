@@ -7,6 +7,9 @@ from wity import (
     APIError,
     Choice,
     ChoiceAnswer,
+    ExtractEntity,
+    ExtractResponse,
+    ExtractType,
     Noul,
     NoulAnswer,
     NoulCriteria,
@@ -15,6 +18,9 @@ from wity import (
     ReasoningInfo,
     Score,
     ScoreAnswer,
+    SplitItem,
+    SplitResponse,
+    SplitSpec,
     SystemOneResponse,
     Usage,
     WityError,
@@ -35,13 +41,18 @@ from .errors import (
     WityRateLimitError,
     WityTimeoutError,
 )
+from .extractor import WityExtractor
+from .splitter import WitySplitter
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "APIError",
     "Choice",
     "ChoiceAnswer",
+    "ExtractEntity",
+    "ExtractResponse",
+    "ExtractType",
     "Noul",
     "NoulAnswer",
     "NoulCriteria",
@@ -50,6 +61,9 @@ __all__ = [
     "ReasoningInfo",
     "Score",
     "ScoreAnswer",
+    "SplitItem",
+    "SplitResponse",
+    "SplitSpec",
     "SystemOneResponse",
     "Usage",
     "WityAPIError",
@@ -59,9 +73,11 @@ __all__ = [
     "WityConnectionError",
     "WityContextOverflowError",
     "WityError",
+    "WityExtractor",
     "WityInsufficientBalanceError",
     "WityInternalServerError",
     "WityRateLimitError",
+    "WitySplitter",
     "WityTimeoutError",
     "choice",
     "noul",

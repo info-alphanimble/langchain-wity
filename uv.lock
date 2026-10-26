@@ -470,7 +470,7 @@ wheels = [
 
 [[package]]
 name = "langchain-wity"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -499,7 +499,7 @@ requires-dist = [
     { name = "langsmith", specifier = ">=0.3.45,<1" },
     { name = "pydantic", specifier = ">=2.7.4,<3" },
     { name = "typing-extensions", specifier = ">=4.7" },
-    { name = "wity-sdk", specifier = ">=0.1.1,<0.2" },
+    { name = "wity-sdk", specifier = ">=0.2.0,<0.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -1586,15 +1586,15 @@ wheels = [
 
 [[package]]
 name = "wity-sdk"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/46/40b6f7fed981715c1a7d5db95e8f3be9632f261de0607d4bde8531758e46/wity_sdk-0.1.1.tar.gz", hash = "sha256:e936513d5f3ad29d97163a992a68d5d341b6af0f80b3471ab70363cd15340de0", size = 83082, upload-time = "2026-10-05T08:24:03.382Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/fd/438a13fac31c5a479ff9f2fa917a8fe1c20b28173d756125a2e4edb2e097/wity_sdk-0.2.0.tar.gz", hash = "sha256:1971d56155f7c65fe38b2cdc8d0f5d61488bb347845022fcac3cbf0491b1818f", size = 100678, upload-time = "2026-10-22T08:44:50.516Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/3e/aba1715b4fa61894a73926883ab3f2dc4642cd764df6897e940cc230ca5b/wity_sdk-0.1.1-py3-none-any.whl", hash = "sha256:62bd14c6186cf9973ef6fbcea16242b044f670131a6e9ee4cc558788c2fa2546", size = 24141, upload-time = "2026-10-05T08:24:01.947Z" },
+    { url = "https://files.pythonhosted.org/packages/07/2e/e3b0bd79a42c1584597fdcc5c0964ead2f5217dba286a178fabfffc7c551/wity_sdk-0.2.0-py3-none-any.whl", hash = "sha256:f961fe503878f58444779e1fbd0190ac89e163096f751c74eea8442437492f14", size = 37903, upload-time = "2026-10-22T08:44:49.101Z" },
 ]
 
 [[package]]

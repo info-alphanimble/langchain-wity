@@ -2,9 +2,11 @@
 
 Use [Wity](https://wity.alphanimble.com), the typed-decision API, in LangChain. Ask Wity questions with fixed options and get a probability for every option, in a pipeline or inside an agent.
 
-It has three parts:
+It has five parts:
 
 - `WityClassifier`: a LangChain Runnable that asks Wity typed questions.
+- `WitySplitter`: cuts documents into whole items, like emails in a thread or clauses in a contract.
+- `WityExtractor`: pulls named fields out of a document, with where each value was found.
 - `ModelRouterMiddleware`: Wity picks which LLM handles each agent run.
 - `AutoModeMiddleware`: Wity checks risky tool calls before they run.
 
@@ -190,6 +192,42 @@ gate = AutoModeMiddleware(
 )
 ```
 
+## Split and extract
+
+`WitySplitter` cuts a document into whole items. Say what one item is in plain words:
+
+```python
+from langchain_wity import WitySplitter
+
+splitter = WitySplitter(split="one item per email")
+
+splitter.split_text(thread)             # ["From: dana@...", "From: marcus@..."]
+docs = splitter.split_documents(docs)   # one Document per item
+docs[0].metadata["start_index"]         # where the item starts in the original text
+```
+
+Every item is an exact slice of the text. Each new `Document` keeps the metadata of the one it came from, plus `start_index`. Without `split`, Wity cuts one item per paragraph. For more control, pass a `SplitSpec(unit=..., starts_at=[...], keep_together=[...], never_split=[...])`. To split the way a saved split skill does, pass `skill="name"` instead of `split`.
+
+`WityExtractor` pulls named fields out of a document:
+
+```python
+from langchain_wity import WityExtractor
+
+extractor = WityExtractor(
+    fields={"party": "Who signs the contract", "start": "When the contract starts"},
+    types={"start": "date"},
+)
+
+res = extractor.invoke(contract)    # text or a Document
+res.fields["party"]                 # ["Kestrel Foods Ltd."]
+res.fields["start"]                 # ["2025-03-14"]: typed fields come back normalised
+res.entities[0].start               # where the value was read in the text
+```
+
+Ask for 1 to 16 fields. `types` takes `"date"`, `"duration"` or `"number"`. Each value in `res.entities` has a confidence from 0 to 1. Like Wity's probabilities, it isn't calibrated.
+
+Both are Runnables, so they work in pipelines and with `batch` and `abatch`. A document can be up to 60,000 characters. Split and extract read the whole document, so they wait at least two minutes before timing out.
+
 ## Reasoning and speed
 
 Wity answers most questions in one fast pass. With `reasoning="auto"` it thinks first when a question needs it, for example when the top options are close. That usually takes 1–4 seconds.
@@ -217,9 +255,11 @@ gate = AutoModeMiddleware(tools=[send_email], classifier=WityClassifier(reasonin
 
 | Option | Default | What it does |
 |---|---|---|
-| `questions` | none | Fixed questions. Then each call takes only the state. |
+| `questions` | none | `WityClassifier`: fixed questions. Then each call takes only the state. |
 | `reasoning` | API default (`"auto"`) | `"off"`, `"auto"` or `"always"` |
 | `max_latency_ms` | none | Time limit per request, a whole number from 200 to 120000 ms |
+| `split`, `skill` | API default | `WitySplitter`: what one item is, or a split skill. Not both. |
+| `fields`, `types` | required, none | `WityExtractor`: the fields to pull out, and which ones to normalise |
 | `api_key` | `WITY_API_KEY` | Your Wity key |
 | `base_url` | `WITY_BASE_URL`, then the SDK's default | The API address |
 | `timeout` | 60 | Seconds per attempt |
@@ -262,7 +302,11 @@ classifier = WityClassifier(questions=..., max_retries=0).with_retry(stop_after_
 
 LangChain's `get_usage_metadata_callback()` doesn't count Wity's tokens. Read them from `res.usage.input_tokens`, or in LangSmith.
 
-**Pickling.** Classifiers and errors can be pickled, for example to send them to a process pool. A pickled classifier holds its options, not its connections. A key read from `WITY_API_KEY` isn't pickled: the other process reads its own.
+**Pickling.** Classifiers, splitters, extractors and errors can be pickled, for example to send them to a process pool. A pickled classifier holds its options, not its connections. A key read from `WITY_API_KEY` isn't pickled: the other process reads its own.
+
+## Update notice
+
+When code that uses `langchain-wity` runs at a terminal, it tells you on stderr when a newer version is out, at most once a day. It asks PyPI at most once a day, in the background, so nothing waits for it. It stays quiet in CI, when output is piped, and on servers. Set `WITY_NO_UPDATE_CHECK=1` to turn it off. The same variable turns it off in every Wity package.
 
 ## Examples
 

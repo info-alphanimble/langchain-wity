@@ -15,7 +15,7 @@ uv run ruff format .   # fix formatting
 
 ## Live tests
 
-The live tests make about 7 real calls to Wity, costing a fraction of a cent. Put your key in a `.env` file in this folder (it's git-ignored):
+The live tests make about 9 real calls to Wity, costing a fraction of a cent. Put your key in a `.env` file in this folder (it's git-ignored):
 
 ```sh
 WITY_API_KEY=wity_...

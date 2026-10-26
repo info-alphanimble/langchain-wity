@@ -14,7 +14,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from langchain_wity import WityClassifier
+from langchain_wity import WityClassifier, WityExtractor, WitySplitter
 
 TEST_KEY = "wity_test_secret_1234567890"
 """A made-up key. Tests check that it never leaks into errors, logs or traces."""
@@ -79,14 +79,25 @@ class FakeWity:
 
     def classifier(self, **options: Any) -> WityClassifier:
         """A classifier wired to this fake server. No retries unless asked for."""
+        return WityClassifier(**self._wired(options))
+
+    def splitter(self, **options: Any) -> WitySplitter:
+        """A splitter wired to this fake server."""
+        return WitySplitter(**self._wired(options))
+
+    def extractor(self, **options: Any) -> WityExtractor:
+        """An extractor wired to this fake server."""
+        return WityExtractor(**self._wired(options))
+
+    def _wired(self, options: dict[str, Any]) -> dict[str, Any]:
         transport = httpx.MockTransport(self._handle)
         options.setdefault("api_key", TEST_KEY)
         options.setdefault("max_retries", 0)
-        return WityClassifier(
-            http_client=httpx.Client(transport=transport),
-            http_async_client=httpx.AsyncClient(transport=transport),
+        return {
+            "http_client": httpx.Client(transport=transport),
+            "http_async_client": httpx.AsyncClient(transport=transport),
             **options,
-        )
+        }
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Real calls to Wity. Skipped unless WITY_LIVE=1. About 7 calls, costing a fraction of a cent.
+"""Real calls to Wity. Skipped unless WITY_LIVE=1. About 9 calls, costing a fraction of a cent.
 
 Needs WITY_API_KEY. See CONTRIBUTING.md for how to run them.
 """
@@ -13,7 +13,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 
-from langchain_wity import WityClassifier, WityContextOverflowError, choice, noul, score
+from langchain_wity import WityClassifier, WityContextOverflowError, WityExtractor, WitySplitter, choice, noul, score
 from langchain_wity.middleware import AutoModeMiddleware, ModelChoice, ModelRouterMiddleware
 
 from .conftest import fake_model, tool_call
@@ -115,3 +115,22 @@ def test_risk_gate_runs_an_approved_call() -> None:
     message = gate_run("Reply to sam@example.com that lunch at 12 tomorrow works for me.", call)
     assert message.status == "success", message.content
     assert ran == ["sam@example.com"]
+
+
+THREAD = "From: dana@example.com\nSeal test failed.\n\nFrom: marcus@example.com\nRerun it on 9 October 2025."
+
+
+def test_split_cuts_whole_items() -> None:
+    docs = WitySplitter(split="one item per email", api_key=KEY, base_url=BASE_URL).invoke(THREAD)
+    assert len(docs) == 2
+    for doc in docs:
+        start = doc.metadata["start_index"]
+        assert THREAD[start : start + len(doc.page_content)] == doc.page_content
+
+
+async def test_extract_finds_a_typed_field() -> None:
+    extractor = WityExtractor(
+        fields={"when": "The date of the rerun"}, types={"when": "date"}, api_key=KEY, base_url=BASE_URL
+    )
+    res = await extractor.ainvoke(THREAD)
+    assert res.fields["when"] == ["2025-10-09"]
